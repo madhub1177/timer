@@ -1,8 +1,0 @@
-{
-  "extends": "@parcel/config-default",
-  "transformers": {
-    "*.pv": [
-      "@parcel/transformer-raw"
-    ]
-  }
-}
