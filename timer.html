@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timer Bhai - Voice Controlled Timer</title>
+    <link rel="stylesheet" href="timer.css">
+</head>
+
+<body>
+    <div class="container">
+        <div class="timer">
+            <input id="hour" type="number" min="0" max="24" value="00">
+            <span>:</span>
+            <input id="minute" type="number" min="0" max="59" value="00">
+            <span>:</span>
+            <input id="second" type="number" min="0" max="59" value="00">
+        </div>
+        <div class="controls">
+            <!-- <button id="startButton">Start Listening</button> -->
+            <!-- <div id="status"></div> -->
+            <!-- <button id="enableVoiceBtn">Enable Voice</button> -->
+            <div>
+                <button id="startPauseBtn">Start</button>
+                <button id="resetBtn">Reset</button>
+                <button id="voiceBtn">🎙️ Voice Command</button>
+                <button id="stopVoiceBtn">🛑 Stop Listening</button>
+            </div>
+        </div>
+        <div class="instructions">
+            <h2>🎙️ Voice Instructions</h2>
+            <ul>
+                <li><strong>Set time:</strong> Say <em>"5 hour 5 minute 5 seconds"</em></li>
+                <li><strong>Start timer:</strong> Say <em>"start timer"</em></li>
+                <li><strong>Stop timer:</strong> Say <em>"stop timer"</em></li>
+                <li><strong>Reset timer:</strong> Say <em>"reset timer"</em></li>
+            </ul>
+        </div>
+
+        <!-- <div id="instructions" style="margin-top: 20px; font-size: 0.9rem; color: #666;">
+            <p><strong>Voice Commands:</strong></p>
+            <ul>
+                <li>Say "<strong>Hey Timer</strong>" to activate</li>
+                <li>Set timer: "<strong>5 minutes 30 seconds</strong>"</li>
+                <li>Control: "<strong>start timer</strong>", "<strong>pause timer</strong>", "<strong>reset
+                        timer</strong>"</li>
+            </ul>
+        </div> -->
+    </div>
+    <script type="module" src="./models/porcupineBase64.js"></script>
+
+    <script type="module">
+        import { setupVoiceControl } from './voice-control.js';
+        import { startWakeWordDetection } from './index.js';
+        import { updateStartButtonState, getTotalSeconds } from './timer-utils.js';
+
+        // Get the input fields
+        const hourInput = document.getElementById('hour');
+        const minuteInput = document.getElementById('minute');
+        const secondInput = document.getElementById('second');
+        const startPauseBtn = document.getElementById('startPauseBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        // const enableVoiceBtn = document.getElementById('enableVoiceBtn');
+
+        let intervalId;
+        let isRunning = false;
+        let voiceEnabled = false;
+
+
+
+        function setInputsFromSeconds(totalSeconds) {
+            const h = Math.floor(totalSeconds / 3600);
+            const m = Math.floor((totalSeconds % 3600) / 60);
+            const s = totalSeconds % 60;
+            hourInput.value = String(h).padStart(2, '0');
+            minuteInput.value = String(m).padStart(2, '0');
+            secondInput.value = String(s).padStart(2, '0');
+        }
+
+        function startTimer() {
+            let secondsLeft = getTotalSeconds(hourInput, minuteInput, secondInput);
+            if (secondsLeft <= 0) return;
+
+            intervalId = setInterval(() => {
+                secondsLeft--;
+                setInputsFromSeconds(secondsLeft);
+                if (secondsLeft <= 0) {
+                    clearInterval(intervalId);
+                    isRunning = false;
+                    startPauseBtn.textContent = 'Start';
+                    playAlarm();
+                }
+            }, 1000);
+        }
+
+        function playAlarm() {
+            // Create audio context for sound alert
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+                gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + 1);
+            } catch (e) {
+                console.error("Error playing alarm sound:", e);
+            }
+        }
+
+        startPauseBtn.addEventListener('click', () => {
+            if (!isRunning) {
+                startTimer();
+                isRunning = true;
+                startPauseBtn.textContent = 'Pause';
+            } else {
+                clearInterval(intervalId);
+                isRunning = false;
+                startPauseBtn.textContent = 'Start';
+            }
+        });
+
+        resetBtn.addEventListener('click', () => {
+            clearInterval(intervalId);
+            isRunning = false;
+            startPauseBtn.textContent = 'Start';
+            hourInput.value = '00';
+            minuteInput.value = '00';
+            secondInput.value = '00';
+            updateStartButtonState(hourInput, minuteInput, secondInput, startPauseBtn)
+        });
+
+        //  enableVoiceBtn.addEventListener('click', async () => {
+        // if (!voiceEnabled) {
+        //     const success = await startWakeWordDetection();
+        //     voiceEnabled = success;
+        // } else {
+        //     await stopVoiceProcessor();
+        //     voiceEnabled = false;
+        // }
+        // });
+
+        [hourInput, minuteInput, secondInput].forEach(input => {
+            input.addEventListener('focus', () => input.select());
+            input.addEventListener('input', () => {
+                if (input.value.length >= 2) {
+                    const value = parseInt(input.value);
+                    const max = parseInt(input.getAttribute('max'));
+                    if (value > max) input.value = String(max).padStart(2, '0');
+
+                    if (input === hourInput) minuteInput.focus();
+                    else if (input === minuteInput) secondInput.focus();
+                }
+                input.value = input.value.padStart(2, '0').slice(0, 2);
+                updateStartButtonState(hourInput, minuteInput, secondInput, startPauseBtn)
+            });
+        });
+
+        // Hook up voice control logic
+        setupVoiceControl({
+            hourInput,
+            minuteInput,
+            secondInput,
+            startButton: startPauseBtn
+        });
+
+        updateStartButtonState(hourInput, minuteInput, secondInput, startPauseBtn);// Initialize start button state
+    </script>
+</body>
+
+</html>
